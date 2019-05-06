@@ -48,15 +48,19 @@
     <Procedure Identifier="Execute">
 
       <Constants>
-        <!-- voltStartOffset: change ip adress -->
+        <!-- DeviceName: change ip adress -->
         <Constant Identifier="DeviceName" Type="string" Expression="'TCPIP0::192.168.2.73::inst0::INSTR'"/>
         <!-- voltStartOffset: set this to the value to get the first batch in view, the other ones will be auto offsetted -->
-        <Constant Identifier="voltStartOffset" Type="Extended" Expression="40 * milli"/>
-        <Constant Identifier="BlockCount" Type="Int32" Expression="500"/>
-        <Constant Identifier="CenterOffset" Type="Int32" Expression="59 - 9"/>
-        <Constant Identifier="HasCenterSample" Type="Boolean" Expression="False"/>
+        <Constant Identifier="AwgAmplitude" Type="Extended" Expression="3.0"/>
         <Constant Identifier="AwgFreq" Type="Extended" Expression="300"/>
         <Constant Identifier="AwgPeriod" Type="Extended" Expression="1/AwgFreq"/>
+        <Constant Identifier="AwgOffset" Type="Extended" Expression="0.0"/>
+        <Constant Identifier="WaveSCPICommand" Type="string" Expression="Format('C1:BSWV WVTP,ARB,FRQ,%s,AMP,%s,OFST,%s', FloatToCode(AwgFreq), FloatToCode(AwgAmplitude), FloatToCode(AwgOffset))"/>
+        <Constant Identifier="voltStartOffset" Type="Extended" Expression="50 * milli"/>
+        <Constant Identifier="BlockCount" Type="Int32" Expression="500"/>
+        <!-- How much valid centre values in center: 2 x CenterOffset + CenterSample -->
+        <Constant Identifier="CenterOffset" Type="Int32" Expression="59 - 9"/>
+        <Constant Identifier="HasCenterSample" Type="Boolean" Expression="False"/>
         <Constant Identifier="AwgOutputChannel" Type="TChannelType" Expression="TChannelType.CH1"/>
         <Constant Identifier="AwgTrace" Type="TTraceType" Expression="TTraceType.CH1"/>
         <Constant Identifier="TriggerChannel" Type="TChannelType" Expression="TChannelType.CH3"/>
@@ -64,13 +68,9 @@
         <Constant Identifier="WaveName" Type="string" Expression="'RampBatch'"/>
         <Constant Identifier="sDT" Type="string" Expression="'[yyyy/mm/dd hh:mm:ss]'"/>
         <Constant Identifier="SegmentCount" Type="Int32" Expression="378"/>
-        <Constant Identifier="AwgMinValue" Type="Int32" Expression="-32768"/>
-        <Constant Identifier="AwgMaxValue" Type="Int32" Expression="32767"/>
         <Constant Identifier="CheckMinValue" Type="Int32" Expression="AwgMinValue"/>
         <Constant Identifier="CheckMaxValue" Type="Int32" Expression="AwgMaxValue"/>
         <Constant Identifier="AwgFixedSamples" Type="Int32" Expression="16384"/>
-        <Constant Identifier="AwgAmplitude" Type="Extended" Expression="1.99990"/>
-        <Constant Identifier="AwgOffset" Type="Extended" Expression="0.0"/>
         <Constant Identifier="AwgLSBStep" Type="Extended" Expression="AwgAmplitude / 65536"/>
         <Constant Identifier="AwgOutputChannelVDiv" Type="Extended" Expression="5 * milli"/>
         <Constant Identifier="AwgOutputChannelVWindow" Type="Extended" Expression="AwgOutputChannelVDiv * 8 * 256 / 200"/>
@@ -108,7 +108,6 @@
             <Execute Statement="SDS1104X.TriggerMode:= TTriggerMode.Normal"/>
             <Execute Statement="SDS1104X.TDiv:= 500*micro"/>
             <Execute Statement="SDS1104X.VDiv[AwgOutputChannel]:= AwgOutputChannelVDiv"/>
-            <!--<Execute Statement="SDS1104X.VOffset[AwgOutputChannel]:= -560 * milli"/>-->
             <Execute Statement="SDS1104X.VDiv[TriggerChannel]:= 1"/>
             <Execute Statement="SDS1104X.VOffset[TriggerChannel]:= -2.5"/>
             <Execute Statement="SDS1104X.MemorySize:= TMemSize.ms140K"/>
@@ -128,13 +127,12 @@
             <Parameter Identifier="BlockCount" Type="UInt32"/>
           </Parameters>
           <Block>
-            <Variable Identifier="SampleCountLeft" Type="Int32" Init="AwgFixedSamples"/>
             <Variable Identifier="SamplesPerBlock" Type="UInt32" Init="AwgFixedSamples div BlockCount"/>
             <Variable Identifier="SamplesPerBlockRemainder" Type="UInt32" Init="AwgFixedSamples mod BlockCount"/>
             <Variable Identifier="CurSamplesInBlock" Type="UInt32"/>
             <Variable Identifier="RunningRemainder" Type="UInt32" Init="BlockCount div 2"/>
             <Object.Use Identifier="Memstream" Type="TMemorystream" Expression="TMemorystream.Create">
-              <Execute Statement="Memstream.WriteDataAnsiString('C1:WVDT WVNM,' + WaveName + ',TYPE,5,LENGTH,32768B,FREQ,300,AMPL,2.7,OFST,0,PHASE,0.000000000,WAVEDATA,')"/>
+              <Execute Statement="Memstream.WriteDataAnsiString('C1:WVDT WVNM,' + WaveName + ',TYPE,5,LENGTH,32768B,FREQ,300,AMPL,6,OFST,0,PHASE,0.000000000,WAVEDATA,')"/>
               <Variable Identifier="SampleCountLeft" Type="Int32" Init="AwgFixedSamples"/>
 
               <ForLoop Indexer="Ib" From="0" To="BlockCount - 1" >
@@ -156,7 +154,7 @@
                   <Variable Identifier="RetCount"/>
                   <Execute Statement="OleCheck(SDS1104X.Message.Write(Command, Memstream.Size, RetCount))"/>
                   <Execute Statement="SDS1104X.RawWrite('C1:ARWV NAME, ' + WaveName)"/>
-                  <Execute Statement="SDS1104X.RawWrite('C1:BSWV WVTP,ARB,FRQ,300,AMP,1.99990,OFST,0')"/>
+                  <Execute Statement="SDS1104X.RawWrite(WaveSCPICommand)"/>
                 </Try>
                 <Finally>
                   <Execute Statement="OleCheck(SafeArrayDestroy(Command))"/>
@@ -192,7 +190,6 @@
               <rep:Reporter.Information Text="Format('StatusFlags: %d', StatusFlags)" Condition="IsVerbose"/>
             </RepeatUntilLoop>
 
-            <Execute Statement="SDS1104X.RawWrite('WAVEFORM_SETUP FP,1,NP,1000')"/>
             <Execute Statement="SDS1104X.HistoryMode:= True"/>
             <rep:Reporter.Information Text="'HistoryMode aan'" Condition="IsVerbose"/>
             <Variable Identifier="FrameHighIndex" Type="Int64" Init="SDS1104X.ActiveFrame"/>
@@ -308,13 +305,11 @@
             <Variable Identifier="voltDiff" Type="Extended"/>
             <Variable Identifier="BatchStartValue" Type="Int32" Init="CheckMinValue"/>
             <Variable Identifier="BatchEndValue" Type="Int32"/>
-            <Variable Identifier="StartEndSignal" Type="TStartEndSignalKind" Init="TStartEndSignalKind.Maximum"/>
             <Variable Identifier="DSOSamples" Type="TRawSampleCollection"/>
 
             <rep:Reporter.Information Text="'InputValue'#9'Sum'#9'OutputValue'#9'SucceedingOutputValue'#9'Difference'"  Target="Output"/>
             <WhileLoop Expression="BatchStartValue &lt; CheckMaxValue">
               <Pause Condition="PauseRequest" ExitCondition="AbortRequest"/>
-              <Execute Statement="StartEndSignal:= TStartEndSignalKind.Minimum" Condition="BatchStartValue &gt; 0"/>
               <Execute Statement="BatchEndValue:= BatchStartValue + BlockCount - 1"/>
               <Execute Statement="BatchEndValue:= CheckMaxValue" Condition="BatchEndValue &gt; CheckMaxValue"/>
 
@@ -329,16 +324,13 @@
 
               <rep:Reporter.Information Text="Format('%s Getting DSO samples', FormatDateTime(sDT, Now))"/>
               <sts:ShowStatus.Information Text="Format('Getting DSO samples')"/>
-              <rep:Reporter.Information Text="Format('SampleRate: %g', SDS1104X.SampleRate)"/>
-              <rep:Reporter.Information Text="Format('Samples: %g; AwgPeriod: %g, SampleRate: %g', AwgPeriod * SDS1104X.SampleRate, AwgPeriod, SDS1104X.SampleRate)"/>
+              <rep:Reporter.Information Text="Format('SampleRate: %g', SDS1104X.SampleRate)" Condition="IsVerbose"/>
+              <rep:Reporter.Information Text="Format('Samples: %g; AwgPeriod: %g, SampleRate: %g', AwgPeriod * SDS1104X.SampleRate, AwgPeriod, SDS1104X.SampleRate)" Condition="IsVerbose"/>
               <Execute Statement="SummedFrameSamplesOptions.LimitSamples:= Round(AwgPeriod * SDS1104X.SampleRate)"/>
               <Execute Statement="DSOSamples:= GetDSOSamples(SummedFrameSamplesOptions)"/>
               <TryFinally>
                 <Try>
                   <ExitOnAbortRequest/>
-                  <Variable Identifier="StartSample" Type="TSamplePoint"/>
-                  <Variable Identifier="StopSample" Type="TSamplePoint"/>
-                  <Variable Identifier="SingleCycleCount" Type="UInt64"/>
 
                   <rep:Reporter.Information Text="Format('%s Process single cycle samples', FormatDateTime(sDT, Now))"/>
                   <sts:ShowStatus.Information Text="Format('Process single cycle samples')"/>
