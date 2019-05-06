@@ -34,10 +34,6 @@
     <Use Identifier="SampleProcessing"/>
   </Uses>
 
-  <Type>
-    <Enumeration Identifier="TStartEndSignalKind" Elements="Minimum, Maximum"/>
-  </Type>
-
   <Constants>
     <Constant Identifier="Milli" Type="Extended" Expression="0.001"/>
     <Constant Identifier="Micro" Type="Extended" Expression="0.000001"/>
@@ -182,7 +178,6 @@
             <Execute Statement="SDS1104X.Arm"/>
             <RepeatUntilLoop Expression="(StatusFlags and TStatusFlags.TriggerIsRready) = 0">
               <Suspend>
-                <!--nanosec: 10sec-->
                 <Resume.BreakRequest IssueExit="True"/>
                 <Resume.Timed Duration="10000000"/>
               </Suspend>
@@ -226,21 +221,21 @@
             <Variable Identifier="HasPrev" Type="Boolean" Init="False"/>
             <Choose>
               <When Expression="HasCenterSample">
-                <rep:Reporter.Information Text="Format('Samples to divide: %d', Samples.SamplePointManager.Count - BlockCount)"/>
+                <rep:Reporter.Information Text="Format('Samples to divide: %d', Samples.SamplePointManager.Count - BlockCount)" Condition="IsVerbose"/>
                 <Execute Statement="SamplesPerBlock:= (Samples.SamplePointManager.Count - BlockCount) div BlockCountX2"/>
                 <Execute Statement="SamplesPerBlockRemainder:= (Samples.SamplePointManager.Count - BlockCount) mod BlockCountX2"/>
                 <Execute Statement="CentreCount:= CenterOffset * 2 + 1"/>
               </When>
               <Otherwise>
-                <rep:Reporter.Information Text="Format('Samples to divide: %d', Samples.SamplePointManager.Count - BlockCount)"/>
+                <rep:Reporter.Information Text="Format('Samples to divide: %d', Samples.SamplePointManager.Count - BlockCount)" Condition="IsVerbose"/>
                 <Execute Statement="SamplesPerBlock:= Samples.SamplePointManager.Count div BlockCountX2"/>
                 <Execute Statement="SamplesPerBlockRemainder:= Samples.SamplePointManager.Count mod BlockCountX2"/>
                 <Execute Statement="CentreCount:= CenterOffset * 2"/>
               </Otherwise>
             </Choose>
             <Variable Identifier="VFactor" Type="Extended" Init="Samples.VFactor / (Count * CentreCount)"/>
-            <rep:Reporter.Information Text="Format('SamplesPerBlock: %d', SamplesPerBlock)"/>
-            <rep:Reporter.Information Text="Format('SamplesPerBlockRemainder: %d', SamplesPerBlockRemainder)"/>
+            <rep:Reporter.Information Text="Format('SamplesPerBlock: %d', SamplesPerBlock)" Condition="IsVerbose"/>
+            <rep:Reporter.Information Text="Format('SamplesPerBlockRemainder: %d', SamplesPerBlockRemainder)" Condition="IsVerbose"/>
             <Variable Identifier="RunningRemainder" Type="Int32" Init="SamplesPerBlockRemainder div 2"/>
             <stm:StateHandler InitialState="BlockA" Name="BlockState">
               <lil:LinkedList.Iterate Head="Samples.SamplePointManager.SampleHead" ItemType="TSamplePoint" RunningItem="Item" Next="Item.Next">
@@ -299,6 +294,7 @@
         <Object.Use Identifier="SDS1104X" Type="TSiglentSDS1104X" Expression="TSiglentSDS1104X.Create(VisaSession)" LocalVariable="false">
           <Object.Use Identifier="SummedFrameSamplesOptions" Type="TSummedFrameSamplesOptions" Expression="TSummedFrameSamplesOptions.Create">
             <Execute Statement="Setup"/>
+            <rep:Reporter.Information Text="''"/>
 
             <Variable Identifier="voltVerticalCenter" Type="Extended"/>
             <Variable Identifier="voltOffset" Type="Extended" Init="voltStartOffset"/>
