@@ -1,0 +1,3 @@
+[submodule "Script.Common.VISA"]
+	path = Script.Common.VISA
+	url = https://github.com/HendriXML/XMLScripts-Common-VISA
