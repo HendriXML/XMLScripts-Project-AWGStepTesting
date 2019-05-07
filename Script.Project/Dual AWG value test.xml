@@ -1,0 +1,173 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<pkg:Program
+  xsi:schemaLocation="urn:schemas-www-wisware.nl-scriptingpackages ../XmlSchemas.Common.XmlScript/XMLScripting.Packages.xsd"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="urn:schemas-www-wisware.nl-xmlscripting"
+  xmlns:pkg="urn:schemas-www-wisware.nl-scriptingpackages"
+  xmlns:sys="urn:schemas-www-wisware.nl-xmlscripting"
+  xmlns:ado="urn:schemas-www-wisware.nl-xmlscripting-ado"
+  xmlns:fil="urn:schemas-www-wisware.nl-xmlscripting-filemanagement"
+  xmlns:fwl="urn:schemas-www-wisware.nl-xmlscripting-windowsfirewall"
+  xmlns:inx="urn:schemas-www-wisware.nl-xmlscripting-index"
+  xmlns:lil="urn:schemas-www-wisware.nl-xmlscripting-linkedlist"
+  xmlns:msx="urn:schemas-www-wisware.nl-xmlscripting-xml"
+  xmlns:reg="urn:schemas-www-wisware.nl-xmlscripting-registry"
+  xmlns:rep="urn:schemas-www-wisware.nl-xmlscripting-report"
+  xmlns:sts="urn:schemas-www-wisware.nl-xmlscripting-showstatus"
+  xmlns:syu="urn:schemas-www-wisware.nl-xmlscripting-sysutils"
+  xmlns:stm="urn:schemas-www-wisware.nl-xmlscripting-statemanagement">
+  >
+  <pkg:ReportTargets>
+    <pkg:Target Identifier="Default"/>
+    <pkg:Target Identifier="Output"/>
+  </pkg:ReportTargets>
+
+  <Imports>
+    <Import Identifier="VISAInstrument" Filename="..\Script.Common.VISA\VISA Instrument.xml"/>
+    <Import Identifier="SiglentSDS1104X" Filename="..\Script.Common.VISA\VISA Siglent SDS1104X.xml"/>
+    <Import Identifier="SampleProcessing" Filename="..\Script.Common.VISA\SampleProcessing.xml"/>
+  </Imports>
+
+  <Uses>
+    <Use Identifier="VISAInstrument"/>
+    <Use Identifier="SiglentSDS1104X"/>
+    <Use Identifier="SampleProcessing"/>
+  </Uses>
+
+  <Constants>
+    <Constant Identifier="Milli" Type="Extended" Expression="0.001"/>
+    <Constant Identifier="Micro" Type="Extended" Expression="0.000001"/>
+    <Constant Identifier="Nano" Type="Extended" Expression="0.000000001"/>
+  </Constants>
+
+  <Procedures>
+    <Procedure Identifier="Execute">
+
+      <Constants>
+        <!-- Value to put in the wave 50% Value, 50% Value + 1 -->
+        <Constant Identifier="Value" Type="Int32" Expression="827"/>
+        <Constant Identifier="DeviceName" Type="string" Expression="'TCPIP0::192.168.2.73::inst0::INSTR'"/>
+        <Constant Identifier="AwgAmplitude" Type="Extended" Expression="3.0"/>
+        <Constant Identifier="AwgFreq" Type="Extended" Expression="300"/>
+        <Constant Identifier="AwgPeriod" Type="Extended" Expression="1/AwgFreq"/>
+        <Constant Identifier="AwgOffset" Type="Extended" Expression="0.0"/>
+        <Constant Identifier="WaveSCPICommand" Type="string" Expression="Format('C1:BSWV WVTP,ARB,FRQ,%s,AMP,%s,OFST,%s', FloatToCode(AwgFreq), FloatToCode(AwgAmplitude), FloatToCode(AwgOffset))"/>
+
+        <Constant Identifier="BlockCount" Type="Int32" Expression="500"/>
+        <Constant Identifier="HasCenterSample" Type="Boolean" Expression="False"/>
+        <Constant Identifier="AwgOutputChannel" Type="TChannelType" Expression="TChannelType.CH1"/>
+        <Constant Identifier="AwgTrace" Type="TTraceType" Expression="TTraceType.CH1"/>
+        <Constant Identifier="TriggerChannel" Type="TChannelType" Expression="TChannelType.CH3"/>
+        <Constant Identifier="Triggertrace" Type="TTraceType" Expression="TTraceType.CH3"/>
+        <Constant Identifier="WaveName" Type="string" Expression="'RampBatch'"/>
+        <Constant Identifier="sDT" Type="string" Expression="'[yyyy/mm/dd hh:mm:ss]'"/>
+        <Constant Identifier="SegmentCount" Type="Int32" Expression="378"/>
+        <Constant Identifier="AwgOutputChannelVDiv" Type="Extended" Expression="5 * milli"/>
+        <Constant Identifier="AwgOutputChannelVWindow" Type="Extended" Expression="AwgOutputChannelVDiv * 8 * 256 / 200"/>
+      </Constants>
+
+      <Variables>
+        <Variable Identifier="SDS1104X" Type="TSiglentSDS1104X"/>
+      </Variables>
+      <Procedures>
+
+        <Function Identifier="GetVisaSession" Type="IVisaSession">
+          <Parameters>
+            <Parameter Identifier="DeviceName" Type="string"/>
+          </Parameters>
+          <Block>
+            <Execute Statement="Result:= IntNil"/>
+            <Variable Identifier="ResourceManager" Type="IResourceManager3" Init="CoResourceManager.Create"/>
+            <Variable Identifier="Description"/>
+            <Execute Statement="OleCheck(ResourceManager.Get_Description(Description))"/>
+
+            <rep:Reporter.Information Text="Format('Description: %s', Description)"/>
+            <Variable Identifier="RetValue"/>
+            <RepeatUntilLoop Expression="Assigned(Result)">
+              <Execute Statement="RetValue:= ResourceManager.Open(DeviceName, TAccessMode.NO_LOCK, 0, '', Result)"/>
+              <rep:Reporter.Information Text="Format('RetValue: %d', RetValue)" Condition="IsDebugging"/>
+              <ExitOnAbortRequest/>
+            </RepeatUntilLoop>
+          </Block>
+        </Function>
+
+        <Procedure Identifier="Setup">
+          <Block>
+            <rep:Reporter.Information Text="SDS1104X.IDN"/>
+            <Execute Statement="SDS1104X.CommHeader:= THeaderType.Off"/>
+            <Execute Statement="SDS1104X.TriggerMode:= TTriggerMode.Normal"/>
+            <Execute Statement="SDS1104X.TDiv:= 500*micro"/>
+            <Execute Statement="SDS1104X.VDiv[AwgOutputChannel]:= AwgOutputChannelVDiv"/>
+            <Execute Statement="SDS1104X.VDiv[TriggerChannel]:= 1"/>
+            <Execute Statement="SDS1104X.VOffset[TriggerChannel]:= -2.5"/>
+            <Execute Statement="SDS1104X.MemorySize:= TMemSize.ms140K"/>
+            <Execute Statement="SDS1104X.SetTrigger(Triggertrace, 2.5)"/>
+            <Execute Statement="SDS1104X.TriggerDelay:= -cHGran * SDS1104X.TDiv - 260 * Nano"/>
+            <Execute Statement="SDS1104X.RawWrite('C1:OUTP ON')"/>
+            <Execute Statement="SDS1104X.RawWrite('C1:SYNC ON')"/>
+            <Execute Statement="SDS1104X.SegmentCount:= SegmentCount"/>
+            <Execute Statement="SDS1104X.SequenceMode:= True"/>
+          </Block>
+        </Procedure>
+
+        <Procedure Identifier="SetupWave">
+          <Parameters>
+            <Parameter Identifier="Value" Type="Int32"/>
+          </Parameters>
+          <Block>
+            <Variable Identifier="SampleCountLeft" Type="Int32" Init="AwgFixedSamples"/>
+            <Variable Identifier="SamplesPerBlock" Type="UInt32" Init="AwgFixedSamples div BlockCount"/>
+            <Variable Identifier="SamplesPerBlockRemainder" Type="UInt32" Init="AwgFixedSamples mod BlockCount"/>
+            <Variable Identifier="RunningRemainder" Type="UInt32" Init="BlockCount div 2"/>
+            <Object.Use Identifier="Memstream" Type="TMemorystream" Expression="TMemorystream.Create">
+              <Execute Statement="Memstream.WriteDataAnsiString('C1:WVDT WVNM,' + WaveName + ',TYPE,5,LENGTH,32768B,FREQ,300,AMPL,3,OFST,0,PHASE,0.000000000,WAVEDATA,')"/>
+              <Variable Identifier="SampleCountLeft" Type="Int32" Init="AwgFixedSamples"/>
+
+              <ForLoop Indexer="Ib" From="0" To="(AwgFixedSamples div 2) - 1" >
+                <Execute Statement="Memstream.WriteDataInt16(Value)"/>
+                <Execute Statement="SampleCountLeft:= SampleCountLeft - 1"/>
+              </ForLoop>
+              <Execute Statement="Value:= Value + 1"/>
+              <WhileLoop Expression="SampleCountLeft &gt; 0">
+                <Execute Statement="Memstream.WriteDataInt16(Value)"/>
+                <Execute Statement="SampleCountLeft:= SampleCountLeft - 1"/>
+              </WhileLoop>
+
+              <Raise Expression="Exception.Create(Format('SampleCountLeft: %d', SampleCountLeft))" Condition="SampleCountLeft &lt;&gt; 0"/>
+              <Variable Identifier="Command" Init="CreateSafeArrayFromStream(Memstream)"/>
+              <TryFinally>
+                <Try>
+                  <Variable Identifier="RetCount"/>
+                  <Execute Statement="OleCheck(SDS1104X.Message.Write(Command, Memstream.Size, RetCount))"/>
+                  <Execute Statement="SDS1104X.RawWrite('C1:ARWV NAME, ' + WaveName)"/>
+                  <Execute Statement="SDS1104X.RawWrite(WaveSCPICommand)"/>
+                </Try>
+                <Finally>
+                  <Execute Statement="OleCheck(SafeArrayDestroy(Command))"/>
+                </Finally>
+              </TryFinally>
+            </Object.Use>
+          </Block>
+        </Procedure>
+
+      </Procedures>
+
+      <Block>
+        <Variable Identifier="VisaSession" Type="IVisaSession" Init="GetVisaSession(DeviceName)"/>
+        <ExitOnAbortRequest/>
+
+        <Object.Use Identifier="SDS1104X" Type="TSiglentSDS1104X" Expression="TSiglentSDS1104X.Create(VisaSession)" LocalVariable="false">
+          <Execute Statement="Setup"/>
+          <rep:Reporter.Information Text="Format('%s Setting up wave %d..%d', FormatDateTime(sDT, Now), Value, Value + 1)"/>
+          <sts:ShowStatus.Information Text="Format('Setting up wave %d..%d', Value, Value + 1)"/>
+          <Execute Statement="SetupWave(Value)"/>
+          <sts:ShowStatus.Information Text="'Done!'"/>
+        </Object.Use>
+      </Block>
+    </Procedure>
+  </Procedures>
+
+  <Block>
+    <Execute Statement="Execute"/>
+  </Block>
+</pkg:Program>
