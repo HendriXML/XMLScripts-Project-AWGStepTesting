@@ -12,8 +12,8 @@ What's needed to use this script?
 
 The first run of the script will probably not have the waveform in view, because of the 5mV/div it needs a accurate DSO offset. Using the pause checkbox the script will stop making manual adjustments possible. Unchecking pause and resume will continue without further pausing. (But it can be checked at anytime, to request a pause. The script has a script element for that to check this.)
 
-# Automatically test AWG output.xml
+## Automatically test AWG output.xml
 Main script to find extreme transitions steps
 
-# Dual AWG value test.xml
+## Dual AWG value test.xml
 Script to generate a waveform with only 2 values in it, to zoom in on the transition between them
