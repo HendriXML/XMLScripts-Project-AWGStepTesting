@@ -1,5 +1,5 @@
 # XMLScripts-Project-AWGStepTesting
-XMLScript project that allows measuring the steps between different input values
+XMLScript project that allows measuring the steps between all input values and it’s successor of a SAG1021.
 
 What's needed to use this script?
 * SAG1021
