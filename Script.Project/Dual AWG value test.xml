@@ -45,13 +45,14 @@
 
       <Constants>
         <!-- Value to put in the wave 50% Value, 50% Value + 1 -->
-        <Constant Identifier="Value" Type="Int32" Expression="827"/>
+        <Constant Identifier="Value" Type="Int32" Expression="-28261"/>
         <Constant Identifier="DeviceName" Type="string" Expression="'TCPIP0::192.168.2.73::inst0::INSTR'"/>
         <Constant Identifier="AwgAmplitude" Type="Extended" Expression="3.0"/>
         <Constant Identifier="AwgFreq" Type="Extended" Expression="300"/>
         <Constant Identifier="AwgPeriod" Type="Extended" Expression="1/AwgFreq"/>
         <Constant Identifier="AwgOffset" Type="Extended" Expression="0.0"/>
         <Constant Identifier="WaveSCPICommand" Type="string" Expression="Format('C1:BSWV WVTP,ARB,FRQ,%s,AMP,%s,OFST,%s', FloatToCode(AwgFreq), FloatToCode(AwgAmplitude), FloatToCode(AwgOffset))"/>
+        <Constant Identifier="voltStartOffset" Type="Extended" Expression="50 * milli"/>
 
         <Constant Identifier="BlockCount" Type="Int32" Expression="500"/>
         <Constant Identifier="HasCenterSample" Type="Boolean" Expression="False"/>
@@ -64,6 +65,7 @@
         <Constant Identifier="SegmentCount" Type="Int32" Expression="378"/>
         <Constant Identifier="AwgOutputChannelVDiv" Type="Extended" Expression="5 * milli"/>
         <Constant Identifier="AwgOutputChannelVWindow" Type="Extended" Expression="AwgOutputChannelVDiv * 8 * 256 / 200"/>
+        <Constant Identifier="AwgLSBStep" Type="Extended" Expression="AwgAmplitude / 65536"/>
       </Constants>
 
       <Variables>
@@ -150,10 +152,20 @@
           </Block>
         </Procedure>
 
+        <Procedure Identifier="SetupDSOWindow">
+          <Parameters>
+            <Parameter Identifier="voltVerticalCenter" Type="Extended"/>
+          </Parameters>
+          <Block>
+            <Execute Statement="SDS1104X.VOffset[AwgOutputChannel]:= -voltVerticalCenter"/>
+          </Block>
+        </Procedure>
+
       </Procedures>
 
       <Block>
         <Variable Identifier="VisaSession" Type="IVisaSession" Init="GetVisaSession(DeviceName)"/>
+        <Variable Identifier="voltVerticalCenter" Type="Extended"/>
         <ExitOnAbortRequest/>
 
         <Object.Use Identifier="SDS1104X" Type="TSiglentSDS1104X" Expression="TSiglentSDS1104X.Create(VisaSession)" LocalVariable="false">
@@ -161,6 +173,11 @@
           <rep:Reporter.Information Text="Format('%s Setting up wave %d..%d', FormatDateTime(sDT, Now), Value, Value + 1)"/>
           <sts:ShowStatus.Information Text="Format('Setting up wave %d..%d', Value, Value + 1)"/>
           <Execute Statement="SetupWave(Value)"/>
+          
+          <Execute Statement="voltVerticalCenter:= AwgOffset + (Value + Value + 1) * 0.5 * AwgLSBStep + voltStartOffset"/>
+          <rep:Reporter.Information Text="Format('%s Setting up DSO Window, centered at %f mV', FormatDateTime(sDT, Now), voltVerticalCenter * 1000)"/>
+          <sts:ShowStatus.Information Text="Format('Setting up DSO Window, centered at %f mV', voltVerticalCenter * 1000)"/>
+          <Execute Statement="SetupDSOWindow(voltVerticalCenter)"/>
           <sts:ShowStatus.Information Text="'Done!'"/>
         </Object.Use>
       </Block>
