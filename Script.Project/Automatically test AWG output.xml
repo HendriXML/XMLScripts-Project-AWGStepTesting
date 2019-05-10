@@ -106,7 +106,7 @@
             <Execute Statement="SDS1104X.CommHeader:= THeaderType.Off"/>
             <Execute Statement="SDS1104X.AcquireWay:= TAcquireWay.Sampling"/>
             <Execute Statement="SDS1104X.TriggerMode:= TTriggerMode.Normal"/>
-            <Execute Statement="SDS1104X.TDiv:= 1000*micro"/>
+            <Execute Statement="SDS1104X.TDiv:= 500*micro"/>
             <Execute Statement="SDS1104X.VDiv[AwgOutputChannel]:= AwgOutputChannelVDiv"/>
             <Execute Statement="SDS1104X.VDiv[TriggerChannel]:= 1"/>
             <Execute Statement="SDS1104X.VOffset[TriggerChannel]:= -2.5"/>
