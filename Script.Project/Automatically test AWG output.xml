@@ -18,8 +18,9 @@
   xmlns:stm="urn:schemas-www-wisware.nl-xmlscripting-statemanagement">
   >
   <pkg:ReportTargets>
-    <pkg:Target Identifier="Default"/>
-    <pkg:Target Identifier="Output"/>
+    <pkg:Target Identifier="Default" Description="Progress info"/>
+    <pkg:Target Identifier="Output" Description="Step sizes"/>
+    <pkg:Target Identifier="SaturatedMeasurements" Description="Saturated measurement warnings"/>
   </pkg:ReportTargets>
 
   <Imports>
@@ -46,13 +47,13 @@
       <Constants>
         <!-- DeviceName: change ip adress -->
         <Constant Identifier="DeviceName" Type="string" Expression="'TCPIP0::192.168.2.73::inst0::INSTR'"/>
-        <!-- voltStartOffset: set this to the value to get the first batch in view, the other ones will be auto offsetted -->
+        <!-- voltStartOffset: set this to the value to get the first batch in view, wrong values will be auto offsetted, but that takes extra batches -->
+        <Constant Identifier="voltStartOffset" Type="Extended" Expression="0 * milli"/>
         <Constant Identifier="AwgAmplitude" Type="Extended" Expression="3.0"/>
         <Constant Identifier="AwgFreq" Type="Extended" Expression="300"/>
         <Constant Identifier="AwgPeriod" Type="Extended" Expression="1/AwgFreq"/>
         <Constant Identifier="AwgOffset" Type="Extended" Expression="0.0"/>
         <Constant Identifier="WaveSCPICommand" Type="string" Expression="Format('C1:BSWV WVTP,ARB,FRQ,%s,AMP,%s,OFST,%s', FloatToCode(AwgFreq), FloatToCode(AwgAmplitude), FloatToCode(AwgOffset))"/>
-        <Constant Identifier="voltStartOffset" Type="Extended" Expression="50 * milli"/>
         <Constant Identifier="BlockCount" Type="Int32" Expression="500"/>
         <!-- How much valid centre values in center: 2 x CenterOffset + CenterSample -->
         <Constant Identifier="CenterOffset" Type="Int32" Expression="59 - 9"/>
@@ -66,6 +67,8 @@
         <Constant Identifier="SegmentCount" Type="Int32" Expression="378"/>
         <Constant Identifier="CheckMinValue" Type="Int32" Expression="AwgMinValue"/>
         <Constant Identifier="CheckMaxValue" Type="Int32" Expression="AwgMaxValue"/>
+        <Constant Identifier="SaturatedHighValue" Type="Int32" Expression="120"/>
+        <Constant Identifier="SaturatedLowValue" Type="Int32" Expression="-120"/>
         <Constant Identifier="AwgFixedSamples" Type="Int32" Expression="16384"/>
         <Constant Identifier="AwgLSBStep" Type="Extended" Expression="AwgAmplitude / 65536"/>
         <Constant Identifier="AwgOutputChannelVDiv" Type="Extended" Expression="5 * milli"/>
@@ -90,7 +93,7 @@
             <rep:Reporter.Information Text="Format('Description: %s', Description)"/>
             <Variable Identifier="RetValue"/>
             <RepeatUntilLoop Expression="Assigned(Result)">
-              <Execute Statement="RetValue:= ResourceManager.Open(DeviceName, TAccessMode.NO_LOCK, 0, '', Result)"/>
+              <Execute Statement="RetValue:= ResourceManager.Open(DeviceName, TAccessMode.EXCLUSIVE_LOCK, 2000, '', Result)"/>
               <rep:Reporter.Information Text="Format('RetValue: %d', RetValue)" Condition="IsDebugging"/>
               <ExitOnAbortRequest/>
             </RepeatUntilLoop>
@@ -101,8 +104,9 @@
           <Block>
             <rep:Reporter.Information Text="SDS1104X.IDN"/>
             <Execute Statement="SDS1104X.CommHeader:= THeaderType.Off"/>
+            <Execute Statement="SDS1104X.AcquireWay:= TAcquireWay.Sampling"/>
             <Execute Statement="SDS1104X.TriggerMode:= TTriggerMode.Normal"/>
-            <Execute Statement="SDS1104X.TDiv:= 500*micro"/>
+            <Execute Statement="SDS1104X.TDiv:= 1000*micro"/>
             <Execute Statement="SDS1104X.VDiv[AwgOutputChannel]:= AwgOutputChannelVDiv"/>
             <Execute Statement="SDS1104X.VDiv[TriggerChannel]:= 1"/>
             <Execute Statement="SDS1104X.VOffset[TriggerChannel]:= -2.5"/>
@@ -186,8 +190,9 @@
             </RepeatUntilLoop>
 
             <Execute Statement="SDS1104X.HistoryMode:= True"/>
-            <rep:Reporter.Information Text="'HistoryMode aan'" Condition="IsVerbose"/>
+            <rep:Reporter.Information Text="'HistoryMode ON'" Condition="IsVerbose"/>
             <Variable Identifier="FrameHighIndex" Type="Int64" Init="SDS1104X.ActiveFrame"/>
+            <!--<Variable Identifier="FrameHighIndex" Type="Int64" Init="10"/>-->
             <rep:Reporter.Information Text="Format('FrameMaxIndex: %d', FrameHighIndex)" Condition="IsVerbose"/>
             <Execute Statement="Result:= SDS1104X.GetSummedFrameSamples(AwgTrace, FrameHighIndex, Options)"/>
           </Block>
@@ -202,6 +207,7 @@
             <Parameter Identifier="CenterOffset" Type="Integer"/>
             <Parameter Identifier="HasCenterSample" Type="Boolean"/>
             <Parameter Identifier="OffCentreVoltage" Type="Extended" Direction="Output"/>
+            <Parameter Identifier="OutValue" Type="Int32" Direction="Output"/>
           </Parameters>
           <Block>
             <Variable Identifier="TotalSumCount" Type="Int32" Init="0"/>
@@ -213,6 +219,10 @@
             <Variable Identifier="BlockSamplesLeft" Type="Int32"/>
             <Variable Identifier="ValidRangeCount" Type="Int32"/>
             <Variable Identifier="CentreCount" Type="Int32"/>
+            <Variable Identifier="CheckMin" Type="Int32"/>
+            <Variable Identifier="CheckMax" Type="Int32"/>
+            <Variable Identifier="MinValue" Type="Int32" Init="1000"/>
+            <Variable Identifier="MaxValue" Type="Int32" Init="-1000"/>
             <Variable Identifier="SamplesPerBlock" Type="Int32"/>
             <Variable Identifier="SamplesPerBlockRemainder" Type="Int32"/>
             <Variable Identifier="Start" Type="Int32" Init="(Samples.Count + 1) div 4"/>
@@ -234,6 +244,10 @@
               </Otherwise>
             </Choose>
             <Variable Identifier="VFactor" Type="Extended" Init="Samples.VFactor / (Count * CentreCount)"/>
+            <rep:Reporter.Information Text="Format('Count: %d', Count)" Condition="IsVerbose"/>
+            <rep:Reporter.Information Text="Format('CentreCount: %d', CentreCount)" Condition="IsVerbose"/>
+            <rep:Reporter.Information Text="Format('Samples.VFactor: %g', Samples.VFactor)" Condition="IsVerbose"/>
+            <rep:Reporter.Information Text="Format('VFactor: %g', VFactor)" Condition="IsVerbose"/>
             <rep:Reporter.Information Text="Format('SamplesPerBlock: %d', SamplesPerBlock)" Condition="IsVerbose"/>
             <rep:Reporter.Information Text="Format('SamplesPerBlockRemainder: %d', SamplesPerBlockRemainder)" Condition="IsVerbose"/>
             <Variable Identifier="RunningRemainder" Type="Int32" Init="SamplesPerBlockRemainder div 2"/>
@@ -255,18 +269,30 @@
                     </Block>
                   </stm:State>
                   <stm:State Name="BlockC">
-                    <Execute Statement="ValueSum:= ValueSum + Item.GetSum(Start, Count)"/>
-                    <Execute Statement="TotalSum:= TotalSum + ValueSum"/>
-                    <Execute Statement="TotalSumCount:= TotalSumCount + 1"/>
+                    <Execute Statement="ValueSum:= ValueSum + Item.GetSum(Start, Count, CheckMin, CheckMax)"/>
+                    <Execute Statement="MinValue:= CheckMin" Condition="CheckMin &lt; MinValue"/>
+                    <Execute Statement="MaxValue:= CheckMax" Condition="CheckMax &gt; MaxValue"/>
+                    <Block Condition="(CheckMin &lt;= SaturatedLowValue) or (CheckMax &gt;= SaturatedHighValue)">
+                      <rep:Reporter.Error Text="Format('Min value saturation at %d value %d', StartInputValue, CheckMin)" Target="SaturatedMeasurements" Condition="CheckMin &lt;= SaturatedLowValue"/>
+                      <rep:Reporter.Error Text="Format('Max value saturation at %d value %d', StartInputValue, CheckMax)" Target="SaturatedMeasurements" Condition="CheckMax &gt;= SaturatedHighValue"/>
+                      <Execute Statement="OffCentreVoltage:= (MinValue + MaxValue) * 0.5 * Samples.VFactor"/>
+                      <Exit/>
+                    </Block>
                     <Execute Statement="BlockSamplesLeft:= BlockSamplesLeft - 1"/>
                     <Block Condition="BlockSamplesLeft = 0">
+                      <Execute Statement="TotalSum:= TotalSum + ValueSum"/>
+                      <Execute Statement="TotalSumCount:= TotalSumCount + 1"/>
                       <Execute Statement="Value:= VFactor * ValueSum"/>
-                      <rep:Reporter.Information Text="Format('%d'#9'%d'#9'%e'#9'%e'#9'%e', StartInputValue-1, ValueSum, VOffset + PrevValue, VOffset + Value, Value - PrevValue)"  Target="Output" Condition="HasPrev"/>
+                      <Block Condition="HasPrev">
+                        <Execute Statement="OutValue:= StartInputValue"/>
+                        <rep:Reporter.Information Text="Format('%d'#9'%d'#9'%e'#9'%e'#9'%e', StartInputValue-1, ValueSum, VOffset + PrevValue, VOffset + Value, Value - PrevValue)"  Target="Output"/>
+                      </Block>
                       <Execute Statement="PrevValue:= Value"/>
                       <Execute Statement="HasPrev:= True"/>
                       <Execute Statement="StartInputValue:= StartInputValue + 1"/>
                       <Block Condition="StartInputValue &gt; EndInputValue">
-                        <Execute Statement="OffCentreVoltage:= TotalSum * VFactor / TotalSumCount"/>
+                        <!--<Execute Statement="OffCentreVoltage:= TotalSum * VFactor / TotalSumCount"/>-->
+                        <Execute Statement="OffCentreVoltage:= (MinValue + MaxValue) * 0.5 * Samples.VFactor"/>
                         <Exit/>
                       </Block>
                       <stm:SetState Name="BlockD"/>
@@ -305,7 +331,6 @@
 
             <rep:Reporter.Information Text="'InputValue'#9'Sum'#9'OutputValue'#9'SucceedingOutputValue'#9'Difference'"  Target="Output"/>
             <WhileLoop Expression="BatchStartValue &lt; CheckMaxValue">
-              <Pause Condition="PauseRequest" ExitCondition="AbortRequest"/>
               <Execute Statement="BatchEndValue:= BatchStartValue + BlockCount - 1"/>
               <Execute Statement="BatchEndValue:= CheckMaxValue" Condition="BatchEndValue &gt; CheckMaxValue"/>
 
@@ -317,12 +342,13 @@
               <rep:Reporter.Information Text="Format('%s Setting up DSO Window, centered at %f mV', FormatDateTime(sDT, Now), voltVerticalCenter * 1000)"/>
               <sts:ShowStatus.Information Text="Format('Setting up DSO Window, centered at %f mV', voltVerticalCenter * 1000)"/>
               <Execute Statement="SetupDSOWindow(voltVerticalCenter)"/>
+              <Pause Condition="PauseRequest" ExitCondition="AbortRequest"/>
 
-              <rep:Reporter.Information Text="Format('%s Getting DSO samples', FormatDateTime(sDT, Now))"/>
-              <sts:ShowStatus.Information Text="Format('Getting DSO samples')"/>
+              <Execute Statement="SummedFrameSamplesOptions.LimitSamples:= Round(AwgPeriod * SDS1104X.SampleRate)"/>
+              <rep:Reporter.Information Text="Format('%s Getting %d DSO samples', FormatDateTime(sDT, Now), SummedFrameSamplesOptions.LimitSamples)"/>
+              <sts:ShowStatus.Information Text="Format('Getting %d DSO samples', SummedFrameSamplesOptions.LimitSamples)"/>
               <rep:Reporter.Information Text="Format('SampleRate: %g', SDS1104X.SampleRate)" Condition="IsVerbose"/>
               <rep:Reporter.Information Text="Format('Samples: %g; AwgPeriod: %g, SampleRate: %g', AwgPeriod * SDS1104X.SampleRate, AwgPeriod, SDS1104X.SampleRate)" Condition="IsVerbose"/>
-              <Execute Statement="SummedFrameSamplesOptions.LimitSamples:= Round(AwgPeriod * SDS1104X.SampleRate)"/>
               <Execute Statement="DSOSamples:= GetDSOSamples(SummedFrameSamplesOptions)"/>
               <TryFinally>
                 <Try>
@@ -330,7 +356,7 @@
 
                   <rep:Reporter.Information Text="Format('%s Process single cycle samples', FormatDateTime(sDT, Now))"/>
                   <sts:ShowStatus.Information Text="Format('Process single cycle samples')"/>
-                  <Execute Statement="ProcessSingleCycleSamples(DSOSamples, BlockCount, BatchStartValue, BatchEndValue, CenterOffset, HasCenterSample, voltDiff)"/>
+                  <Execute Statement="ProcessSingleCycleSamples(DSOSamples, BlockCount, BatchStartValue, BatchEndValue, CenterOffset, HasCenterSample, voltDiff, BatchStartValue)"/>
                   <rep:Reporter.Information Text="Format('%s Off centre voltage: %.2f mV', FormatDateTime(sDT, Now), voltDiff * 1000)"/>
                   <Execute Statement="voltOffset:= voltOffset + voltDiff"/>
                   <ExitOnAbortRequest/>
@@ -340,7 +366,6 @@
                 </Finally>
               </TryFinally>
               <ExitOnAbortRequest/>
-              <Execute Statement="BatchStartValue:= BatchEndValue"/>
             </WhileLoop>
 
             <sts:ShowStatus.Information Text="'Done!'"/>
