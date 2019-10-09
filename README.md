@@ -1,6 +1,10 @@
 # XMLScripts-Project-AWGStepTesting
 XMLScript project that allows measuring the steps between all input values and it’s successor of a SAG1021.
 
+To get this repository with all its submodules the following command might be of use 
+
+git clone --recurse-submodules https://github.com/HendriXML/XMLScripts-Project-AWGStepTesting.git C:\AWGStepTesting
+
 What's needed to use this script?
 * SAG1021
 * NI VISA setup (It uses a COM interface that comes with it)
